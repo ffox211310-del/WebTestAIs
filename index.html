@@ -1,641 +1,247 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>LFM 1.2B Chat</title>
-
-<style>
-* {
-    box-sizing: border-box;
-}
-
-body {
-    margin: 0;
-    font-family: system-ui, sans-serif;
-    background: #f4f4f4;
-    color: #222;
-}
-
-header {
-    background: white;
-    border-bottom: 1px solid #ddd;
-    padding: 12px 16px;
-}
-
-.headerTop {
-    display: flex;
-    align-items: center;
-    font-weight: bold;
-}
-
-#status {
-    margin-left: auto;
-    font-size: 13px;
-    font-weight: normal;
-}
-
-#details {
-    margin-top: 6px;
-    font-size: 12px;
-    color: #777;
-}
-
-#progress {
-    margin-top: 8px;
-    width: 100%;
-    height: 5px;
-    background: #ddd;
-    border-radius: 5px;
-    overflow: hidden;
-}
-
-#progressBar {
-    width: 0%;
-    height: 100%;
-    background: #4fd1c5;
-    transition: width .2s;
-}
-
-#chat {
-    max-width: 900px;
-    margin: auto;
-    padding: 20px 16px 100px;
-}
-
-.message {
-    margin: 12px 0;
-    padding: 12px 15px;
-    border-radius: 14px;
-    white-space: pre-wrap;
-    line-height: 1.6;
-}
-
-.user {
-    background: #dff7f4;
-    margin-left: 15%;
-}
-
-.assistant {
-    background: white;
-    border: 1px solid #ddd;
-    margin-right: 15%;
-}
-
-#inputArea {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: white;
-    border-top: 1px solid #ddd;
-    padding: 10px;
-}
-
-#inputBox {
-    max-width: 900px;
-    margin: auto;
-    display: flex;
-    gap: 8px;
-}
-
-textarea {
-    flex: 1;
-    resize: none;
-    min-height: 45px;
-    max-height: 140px;
-    padding: 11px;
-    border: 1px solid #ccc;
-    border-radius: 12px;
-    font-size: 16px;
-}
-
-button {
-    border: none;
-    border-radius: 12px;
-    padding: 0 18px;
-    background: #4fd1c5;
-    color: white;
-    font-weight: bold;
-}
-
-button:disabled {
-    opacity: .5;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>wllama × LFM2.5-1.2B-JP デモ</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 12px;
+        }
+        h1 {
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+            color: #7c8cf8;
+        }
+        #status {
+            font-size: 0.82rem;
+            color: #a0a0b0;
+            margin-bottom: 8px;
+            min-height: 1.2em;
+        }
+        #chat {
+            flex: 1;
+            overflow-y: auto;
+            background: #16213e;
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .msg {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            line-height: 1.5;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .msg.user {
+            align-self: flex-end;
+            background: #0f3460;
+            border-bottom-right-radius: 4px;
+        }
+        .msg.assistant {
+            align-self: flex-start;
+            background: #2a2a4a;
+            border-bottom-left-radius: 4px;
+        }
+        .msg.system {
+            align-self: center;
+            background: transparent;
+            color: #7c8cf8;
+            font-size: 0.8rem;
+            text-align: center;
+        }
+        #input-area {
+            display: flex;
+            gap: 8px;
+        }
+        #input-area textarea {
+            flex: 1;
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid #333;
+            background: #0d1b2a;
+            color: #e0e0e0;
+            font-size: 0.9rem;
+            font-family: inherit;
+            resize: none;
+            outline: none;
+        }
+        #input-area textarea:focus {
+            border-color: #7c8cf8;
+        }
+        #input-area button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 10px;
+            background: #7c8cf8;
+            color: #fff;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        #input-area button:hover:not(:disabled) {
+            background: #5a6ce0;
+        }
+        #input-area button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+    </style>
 </head>
-
 <body>
-
-<header>
-
-    <div class="headerTop">
-        LFM 1.2B Chat
-        <span id="status">起動中...</span>
+    <h1>🍊 wllama × LFM2.5-1.2B-JP</h1>
+    <div id="status">モデルを初期化中...</div>
+    <div id="chat"></div>
+    <div id="input-area">
+        <textarea id="userInput" rows="2" placeholder="メッセージを入力..." disabled></textarea>
+        <button id="sendBtn" disabled>送信</button>
     </div>
 
-    <div id="details">
-        エンジン確認中...
-    </div>
-
-    <div id="progress">
-        <div id="progressBar"></div>
-    </div>
-
-</header>
-
-<div id="chat"></div>
-
-<div id="inputArea">
-    <div id="inputBox">
-
-        <textarea
-            id="input"
-            placeholder="メッセージを入力..."
-            disabled
-        ></textarea>
-
-        <button id="send" disabled>
-            送信
-        </button>
-
-    </div>
-</div>
-
-
-<script type="module">
-
-import {
-    pipeline,
-    TextStreamer
-} from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
-
-
-const MODEL =
-    "onnx-community/LFM2-1.2B-ONNX";
-
-
-let generator = null;
-
-let messages = [
-    {
-        role: "system",
-        content:
-            "あなたは親しみやすい日本語AIです。回答は簡潔にしてください。自然な会話口調で答えてください。"
-    }
-];
-
-
-const chat =
-    document.getElementById("chat");
-
-const input =
-    document.getElementById("input");
-
-const send =
-    document.getElementById("send");
-
-const status =
-    document.getElementById("status");
-
-const details =
-    document.getElementById("details");
-
-const progressBar =
-    document.getElementById("progressBar");
-
-
-/* -------------------------
-   メッセージ表示
-------------------------- */
-
-function addMessage(role, text) {
-
-    const div =
-        document.createElement("div");
-
-    div.className =
-        "message " +
-        (role === "user"
-            ? "user"
-            : "assistant");
-
-    div.textContent = text;
-
-    chat.appendChild(div);
-
-    window.scrollTo({
-        top: document.body.scrollHeight
-    });
-
-    return div;
-}
-
-
-/* -------------------------
-   WebGPU確認
-------------------------- */
-
-async function checkDevice() {
-
-    if ("gpu" in navigator) {
-
-        try {
-
-            const adapter =
-                await navigator.gpu.requestAdapter();
-
-            if (adapter) {
-
-                details.textContent =
-                    "エンジン: Transformers.js / WebGPU";
-
-                return "webgpu";
-            }
-
-        } catch (e) {}
-    }
-
-    details.textContent =
-        "エンジン: Transformers.js / WASM";
-
-    return "wasm";
-}
-
-
-/* -------------------------
-   モデル読み込み
-------------------------- */
-
-async function loadModel() {
-
-    status.textContent =
-        "モデル確認中...";
-
-    progressBar.style.width =
-        "0%";
-
-
-    const device =
-        await checkDevice();
-
-
-    status.textContent =
-        "モデル読み込み中...";
-
-    details.textContent =
-        `LFM 1.2B / ${device.toUpperCase()}`;
-
-
-    try {
-
-        generator =
-            await pipeline(
-                "text-generation",
-                MODEL,
-                {
-                    dtype: "q4",
-                    device: device,
-
-                    progress_callback:
-                        (progress) => {
-
-                            console.log(
-                                "MODEL LOAD:",
-                                progress
-                            );
-
-                            /*
-                             * Transformers.js の
-                             * ダウンロード進捗
-                             */
-
-                            if (
-                                progress &&
-                                typeof progress.progress
-                                    === "number"
-                            ) {
-
-                                const p =
-                                    Math.min(
-                                        100,
-                                        Math.max(
-                                            0,
-                                            progress.progress
-                                        )
-                                    );
-
-                                progressBar.style.width =
-                                    p + "%";
-
-                                if (
-                                    progress.file
-                                ) {
-
-                                    details.textContent =
-                                        `読み込み中: ${progress.file} (${Math.round(p)}%)`;
-
-                                } else {
-
-                                    details.textContent =
-                                        `モデル読み込み中 (${Math.round(p)}%)`;
-                                }
-                            }
-                        }
-                }
-            );
-
-
-        progressBar.style.width =
-            "100%";
-
-        status.textContent =
-            "準備完了";
-
-        details.textContent =
-            `LFM 1.2B / ${device.toUpperCase()} / 推論可能`;
-
-
-        input.disabled = false;
-        send.disabled = false;
-
-
-        addMessage(
-            "assistant",
-            "こんにちは！LFM 1.2Bやで。"
-        );
-
-
-    } catch (error) {
-
-        console.error(error);
-
-        status.textContent =
-            "読み込み失敗";
-
-        details.textContent =
-            error.message;
-
-        progressBar.style.width =
-            "0%";
-
-
-        addMessage(
-            "assistant",
-            "モデルの読み込みに失敗しました。\n\n" +
-            error.message
-        );
-    }
-}
-
-
-/* -------------------------
-   生成
-------------------------- */
-
-async function generate() {
-
-    const text =
-        input.value.trim();
-
-    if (!text || !generator)
-        return;
-
-
-    input.value = "";
-
-    addMessage(
-        "user",
-        text
-    );
-
-
-    messages.push({
-        role: "user",
-        content: text
-    });
-
-
-    send.disabled = true;
-    input.disabled = true;
-
-
-    status.textContent =
-        "生成中...";
-
-    details.textContent =
-        "推論を実行しています";
-
-
-    const answerDiv =
-        addMessage(
-            "assistant",
-            "..."
-        );
-
-
-    let answer = "";
-
-    let tokenCount = 0;
-
-    const startTime =
-        performance.now();
-
-
-    try {
-
-        const streamer =
-            new TextStreamer(
-                generator.tokenizer,
-                {
-
-                    skip_prompt: true,
-
-                    skip_special_tokens: true,
-
-                    callback_function:
-                        (token) => {
-
-                            answer += token;
-
-                            tokenCount++;
-
-
-                            answerDiv.textContent =
-                                answer;
-
-
-                            const elapsed =
-                                (
-                                    performance.now()
-                                    - startTime
-                                ) / 1000;
-
-
-                            const speed =
-                                elapsed > 0
-                                    ? (
-                                        tokenCount /
-                                        elapsed
-                                    ).toFixed(1)
-                                    : "0";
-
-
-                            status.textContent =
-                                "生成中...";
-
-                            details.textContent =
-                                `${tokenCount} tokens / ${speed} tok/s`;
-
-
-                            window.scrollTo({
-                                top:
-                                    document.body
-                                    .scrollHeight
-                            });
-                        }
-                }
-            );
-
-
-        const output =
-            await generator(
-                messages,
-                {
-
-                    max_new_tokens: 256,
-
-                    do_sample: true,
-
-                    temperature: 0.7,
-
-                    top_p: 0.9,
-
-                    streamer
-                }
-            );
-
-
-        if (!answer) {
-
-            const generated =
-                output[0].generated_text;
-
-
-            if (
-                Array.isArray(generated)
-            ) {
-
-                answer =
-                    generated[
-                        generated.length - 1
-                    ].content;
-
-            } else {
-
-                answer =
-                    String(generated);
-            }
-
-
-            answerDiv.textContent =
-                answer;
+    <script type="module">
+        import { Wllama } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/index.js';
+
+        // ===== 設定 =====
+        // LFM2.5-1.2B-JP の Q4_K_M GGUF (約 700MB)
+        const MODEL_URL = 'https://huggingface.co/LiquidAI/LFM2.5-1.2B-JP-202606-GGUF/resolve/main/LFM2.5-1.2B-JP-202606-Q4_K_M.gguf';
+
+        const statusEl = document.getElementById('status');
+        const chatEl = document.getElementById('chat');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+
+        let wllama = null;
+        let isGenerating = false;
+        let chatHistory = [
+            { role: 'system', content: 'あなたは親切で丁寧な日本語アシスタントです。ユーザーの質問に簡潔に答えてください。' }
+        ];
+
+        // ===== UI ヘルパー =====
+        function addMessage(role, text) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + role;
+            div.textContent = text;
+            chatEl.appendChild(div);
+            chatEl.scrollTop = chatEl.scrollHeight;
+            return div;
         }
 
+        function setStatus(text) {
+            statusEl.textContent = text;
+        }
 
-        const elapsed =
-            (
-                performance.now()
-                - startTime
-            ) / 1000;
+        function setUIEnabled(enabled) {
+            userInput.disabled = !enabled;
+            sendBtn.disabled = !enabled;
+        }
 
+        // ===== wllama 初期化 =====
+        async function initModel() {
+            try {
+                // CDN から wasm ファイルを読み込む設定
+                wllama = new Wllama({
+                    'single-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/wasm/single-thread/wllama.wasm',
+                    'multi-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/wasm/multi-thread/wllama.wasm',
+                });
 
-        const speed =
-            elapsed > 0
-                ? (
-                    tokenCount /
-                    elapsed
-                ).toFixed(1)
-                : "0";
+                setStatus('モデルをダウンロード中... (初回は約700MB)');
 
+                await wllama.loadModelFromUrl(MODEL_URL, {
+                    n_ctx: 4096,       // コンテキスト長
+                    n_batch: 512,      // バッチサイズ
+                    n_threads: navigator.hardwareConcurrency || 4,
+                    progressCallback: ({ loaded, total }) => {
+                        if (total > 0) {
+                            const pct = ((loaded / total) * 100).toFixed(1);
+                            setStatus(`モデルをダウンロード中... ${pct}%`);
+                        }
+                    }
+                });
 
-        status.textContent =
-            "準備完了";
+                setStatus('✅ モデル準備完了');
+                setUIEnabled(true);
+                addMessage('system', 'モデルの読み込みが完了しました。日本語で話しかけてください。');
+            } catch (err) {
+                console.error(err);
+                setStatus('❌ モデルの読み込みに失敗: ' + err.message);
+            }
+        }
 
+        // ===== チャット送信 =====
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text || isGenerating) return;
 
-        details.textContent =
-            `${tokenCount} tokens / ${speed} tok/s / ${elapsed.toFixed(1)}秒`;
+            userInput.value = '';
+            addMessage('user', text);
+            chatHistory.push({ role: 'user', content: text });
 
+            isGenerating = true;
+            setUIEnabled(false);
 
-        messages.push({
-            role: "assistant",
-            content: answer
+            // アシスタントのメッセージ要素を先に作成（ストリーミング用）
+            const assistantDiv = addMessage('assistant', '');
+            let fullResponse = '';
+
+            try {
+                const stream = await wllama.createChatCompletion({
+                    messages: chatHistory,
+                    max_tokens: 512,
+                    temperature: 0.7,
+                    top_k: 40,
+                    top_p: 0.9,
+                    stream: true, // トークンごとにストリーミング
+                });
+
+                for await (const chunk of stream) {
+                    const delta = chunk.choices?.[0]?.delta?.content || '';
+                    if (delta) {
+                        fullResponse += delta;
+                        assistantDiv.textContent = fullResponse;
+                        chatEl.scrollTop = chatEl.scrollHeight;
+                    }
+                }
+
+                chatHistory.push({ role: 'assistant', content: fullResponse });
+
+                // 会話履歴が長くなりすぎたら古いものを削除
+                if (chatHistory.length > 20) {
+                    chatHistory = [chatHistory[0], ...chatHistory.slice(-18)];
+                }
+            } catch (err) {
+                console.error(err);
+                assistantDiv.textContent = 'エラー: ' + err.message;
+            } finally {
+                isGenerating = false;
+                setUIEnabled(true);
+                userInput.focus();
+            }
+        }
+
+        // ===== イベント登録 =====
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
         });
 
-
-    } catch (error) {
-
-        console.error(error);
-
-
-        status.textContent =
-            "生成エラー";
-
-        details.textContent =
-            error.message;
-
-
-        answerDiv.textContent =
-            "生成エラー: " +
-            error.message;
-
-
-        messages.pop();
-    }
-
-
-    send.disabled = false;
-    input.disabled = false;
-
-    input.focus();
-}
-
-
-/* -------------------------
-   Enter
-------------------------- */
-
-send.addEventListener(
-    "click",
-    generate
-);
-
-
-input.addEventListener(
-    "keydown",
-    (e) => {
-
-        if (
-            e.key === "Enter" &&
-            !e.shiftKey
-        ) {
-
-            e.preventDefault();
-
-            generate();
-        }
-    }
-);
-
-
-/* -------------------------
-   起動
-------------------------- */
-
-loadModel();
-
-</script>
-
+        // ===== 起動 =====
+        initModel();
+    </script>
 </body>
 </html>
