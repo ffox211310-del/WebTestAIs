@@ -15,91 +15,33 @@
             height: 100vh;
             padding: 12px;
         }
-        h1 {
-            font-size: 1.1rem;
-            margin-bottom: 8px;
-            color: #7c8cf8;
-        }
-        #status {
-            font-size: 0.82rem;
-            color: #a0a0b0;
-            margin-bottom: 8px;
-            min-height: 1.2em;
-        }
+        h1 { font-size: 1.1rem; margin-bottom: 8px; color: #7c8cf8; }
+        #status { font-size: 0.82rem; color: #a0a0b0; margin-bottom: 8px; min-height: 1.2em; }
         #chat {
-            flex: 1;
-            overflow-y: auto;
-            background: #16213e;
-            border-radius: 10px;
-            padding: 14px;
-            margin-bottom: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+            flex: 1; overflow-y: auto; background: #16213e; border-radius: 10px;
+            padding: 14px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px;
         }
         .msg {
-            max-width: 85%;
-            padding: 10px 14px;
-            border-radius: 12px;
-            line-height: 1.5;
-            font-size: 0.9rem;
-            white-space: pre-wrap;
-            word-break: break-word;
+            max-width: 85%; padding: 10px 14px; border-radius: 12px;
+            line-height: 1.5; font-size: 0.9rem; white-space: pre-wrap; word-break: break-word;
         }
-        .msg.user {
-            align-self: flex-end;
-            background: #0f3460;
-            border-bottom-right-radius: 4px;
-        }
-        .msg.assistant {
-            align-self: flex-start;
-            background: #2a2a4a;
-            border-bottom-left-radius: 4px;
-        }
-        .msg.system {
-            align-self: center;
-            background: transparent;
-            color: #7c8cf8;
-            font-size: 0.8rem;
-            text-align: center;
-        }
-        #input-area {
-            display: flex;
-            gap: 8px;
-        }
+        .msg.user { align-self: flex-end; background: #0f3460; border-bottom-right-radius: 4px; }
+        .msg.assistant { align-self: flex-start; background: #2a2a4a; border-bottom-left-radius: 4px; }
+        .msg.system { align-self: center; background: transparent; color: #7c8cf8; font-size: 0.8rem; text-align: center; }
+        #input-area { display: flex; gap: 8px; }
         #input-area textarea {
-            flex: 1;
-            padding: 10px 14px;
-            border-radius: 10px;
-            border: 1px solid #333;
-            background: #0d1b2a;
-            color: #e0e0e0;
-            font-size: 0.9rem;
-            font-family: inherit;
-            resize: none;
-            outline: none;
+            flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid #333;
+            background: #0d1b2a; color: #e0e0e0; font-size: 0.9rem;
+            font-family: inherit; resize: none; outline: none;
         }
-        #input-area textarea:focus {
-            border-color: #7c8cf8;
-        }
+        #input-area textarea:focus { border-color: #7c8cf8; }
         #input-area button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 10px;
-            background: #7c8cf8;
-            color: #fff;
-            font-weight: 600;
-            font-size: 0.9rem;
-            cursor: pointer;
-            transition: background 0.2s;
+            padding: 10px 20px; border: none; border-radius: 10px;
+            background: #7c8cf8; color: #fff; font-weight: 600;
+            font-size: 0.9rem; cursor: pointer; transition: background 0.2s;
         }
-        #input-area button:hover:not(:disabled) {
-            background: #5a6ce0;
-        }
-        #input-area button:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
+        #input-area button:hover:not(:disabled) { background: #5a6ce0; }
+        #input-area button:disabled { opacity: 0.4; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -115,7 +57,6 @@
         import { Wllama } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/index.js';
 
         // ===== 設定 =====
-        // LFM2.5-1.2B-JP の Q4_K_M GGUF (約 700MB)
         const MODEL_URL = 'https://huggingface.co/LiquidAI/LFM2.5-1.2B-JP-202606-GGUF/resolve/main/LFM2.5-1.2B-JP-202606-Q4_K_M.gguf';
 
         const statusEl = document.getElementById('status');
@@ -139,10 +80,7 @@
             return div;
         }
 
-        function setStatus(text) {
-            statusEl.textContent = text;
-        }
-
+        function setStatus(text) { statusEl.textContent = text; }
         function setUIEnabled(enabled) {
             userInput.disabled = !enabled;
             sendBtn.disabled = !enabled;
@@ -151,17 +89,19 @@
         // ===== wllama 初期化 =====
         async function initModel() {
             try {
-                // CDN から wasm ファイルを読み込む設定
+                // ✅ v3 では pathConfig のキーに 'default' が必要
                 wllama = new Wllama({
-                    'single-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/wasm/single-thread/wllama.wasm',
-                    'multi-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/wasm/multi-thread/wllama.wasm',
+                    'default': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/wasm/wllama.wasm',
                 });
 
                 setStatus('モデルをダウンロード中... (初回は約700MB)');
 
-                await wllama.loadModelFromUrl(MODEL_URL, {
-                    n_ctx: 4096,       // コンテキスト長
-                    n_batch: 512,      // バッチサイズ
+                // ✅ v3 では loadModelFromUrl にオブジェクトを渡す
+                await wllama.loadModelFromUrl({
+                    url: MODEL_URL,
+                }, {
+                    n_ctx: 4096,
+                    n_batch: 512,
                     n_threads: navigator.hardwareConcurrency || 4,
                     progressCallback: ({ loaded, total }) => {
                         if (total > 0) {
@@ -192,7 +132,6 @@
             isGenerating = true;
             setUIEnabled(false);
 
-            // アシスタントのメッセージ要素を先に作成（ストリーミング用）
             const assistantDiv = addMessage('assistant', '');
             let fullResponse = '';
 
@@ -203,7 +142,7 @@
                     temperature: 0.7,
                     top_k: 40,
                     top_p: 0.9,
-                    stream: true, // トークンごとにストリーミング
+                    stream: true,
                 });
 
                 for await (const chunk of stream) {
@@ -217,7 +156,6 @@
 
                 chatHistory.push({ role: 'assistant', content: fullResponse });
 
-                // 会話履歴が長くなりすぎたら古いものを削除
                 if (chatHistory.length > 20) {
                     chatHistory = [chatHistory[0], ...chatHistory.slice(-18)];
                 }
