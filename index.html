@@ -1,203 +1,106 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>wllama × LFM2.5-1.2B-JP デモ</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
-            background: #1a1a2e;
-            color: #e0e0e0;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            padding: 12px;
-        }
-        h1 { font-size: 1.1rem; margin-bottom: 8px; color: #7c8cf8; }
-        #status { font-size: 0.82rem; color: #a0a0b0; margin-bottom: 8px; min-height: 1.2em; }
-        #chat {
-            flex: 1; overflow-y: auto; background: #16213e; border-radius: 10px;
-            padding: 14px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px;
-        }
-        .msg {
-            max-width: 85%; padding: 10px 14px; border-radius: 12px;
-            line-height: 1.5; font-size: 0.9rem; white-space: pre-wrap; word-break: break-word;
-        }
-        .msg.user { align-self: flex-end; background: #0f3460; border-bottom-right-radius: 4px; }
-        .msg.assistant { align-self: flex-start; background: #2a2a4a; border-bottom-left-radius: 4px; }
-        .msg.system { align-self: center; background: transparent; color: #7c8cf8; font-size: 0.8rem; text-align: center; }
-        #input-area { display: flex; gap: 8px; }
-        #input-area textarea {
-            flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid #333;
-            background: #0d1b2a; color: #e0e0e0; font-size: 0.9rem;
-            font-family: inherit; resize: none; outline: none;
-        }
-        #input-area textarea:focus { border-color: #7c8cf8; }
-        #input-area button {
-            padding: 10px 20px; border: none; border-radius: 10px;
-            background: #7c8cf8; color: #fff; font-weight: 600;
-            font-size: 0.9rem; cursor: pointer; transition: background 0.2s;
-        }
-        #input-area button:hover:not(:disabled) { background: #5a6ce0; }
-        #input-area button:disabled { opacity: 0.4; cursor: not-allowed; }
-    </style>
+<meta charset="UTF-8">
+<title>Chrome Built-in AI Chat</title>
+<style>
+  body { font-family: sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+  #chat { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; height: 400px; overflow-y: auto; margin-bottom: 1rem; }
+  .msg { margin: 0.5rem 0; padding: 0.5rem 0.8rem; border-radius: 8px; white-space: pre-wrap; }
+  .user { background: #e3f2fd; text-align: right; }
+  .assistant { background: #f5f5f5; }
+  .system { color: #888; font-size: 0.85em; text-align: center; }
+  #input-area { display: flex; gap: 0.5rem; }
+  #prompt { flex: 1; padding: 0.6rem; border: 1px solid #ccc; border-radius: 6px; }
+  button { padding: 0.6rem 1.2rem; border: none; background: #1a73e8; color: #fff; border-radius: 6px; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+</style>
 </head>
 <body>
-    <h1>🍊 wllama × LFM2.5-1.2B-JP</h1>
-    <div id="status">モデルを初期化中...</div>
-    <div id="chat"></div>
-    <div id="input-area">
-        <textarea id="userInput" rows="2" placeholder="メッセージを入力..." disabled></textarea>
-        <button id="sendBtn" disabled>送信</button>
-    </div>
+<h1>Chrome Built-in AI</h1>
+<div id="status">初期化中...</div>
+<div id="chat"></div>
+<div id="input-area">
+  <input id="prompt" placeholder="メッセージを入力..." disabled>
+  <button id="send" disabled>送信</button>
+</div>
 
-    <script type="module">
-    import { Wllama } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/index.js';
+<script>
+const statusEl = document.getElementById('status');
+const chatEl = document.getElementById('chat');
+const promptEl = document.getElementById('prompt');
+const sendBtn = document.getElementById('send');
+let session = null;
 
-    // ===== 設定 =====
-    const MODEL_URL = 'https://huggingface.co/LiquidAI/LFM2.5-1.2B-JP-202606-GGUF/resolve/main/LFM2.5-1.2B-JP-202606-Q4_K_M.gguf';
-
-    const statusEl = document.getElementById('status');
-    const chatEl = document.getElementById('chat');
-    const userInput = document.getElementById('userInput');
-    const sendBtn = document.getElementById('sendBtn');
-
-    let wllama = null;
-    let isGenerating = false;
-    let chatHistory = [
-        { role: 'system', content: 'あなたは親切で丁寧な日本語アシスタントです。ユーザーの質問に簡潔に答えてください。' }
-    ];
-
-    // ===== LFM2 用チャットテンプレート (ChatML 互換) =====
-    function buildPrompt(messages) {
-        let prompt = '<|startoftext|>';
-        for (const msg of messages) {
-            prompt += `<|im_start|>${msg.role}\n${msg.content}<|im_end|>\n`;
-        }
-        // アシスタントの応答を開始させる
-        prompt += '<|im_start|>assistant\n';
-        return prompt;
-    }
-
-    // ===== UI ヘルパー =====
-    function addMessage(role, text) {
-        const div = document.createElement('div');
-        div.className = 'msg ' + role;
-        div.textContent = text;
-        chatEl.appendChild(div);
-        chatEl.scrollTop = chatEl.scrollHeight;
-        return div;
-    }
-    function setStatus(text) { statusEl.textContent = text; }
-    function setUIEnabled(enabled) {
-        userInput.disabled = !enabled;
-        sendBtn.disabled = !enabled;
-    }
-
-    // ===== wllama 初期化 =====
-    async function initModel() {
-        try {
-            wllama = new Wllama({
-                'default': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/wasm/wllama.wasm',
-            });
-
-            setStatus('モデルをダウンロード中... (初回は約700MB)');
-
-            await wllama.loadModelFromUrl({ url: MODEL_URL }, {
-    n_ctx: 4096,
-    n_batch: 512,
-    n_threads: navigator.hardwareConcurrency || 4,
-    jinja: true,  // ★ GGUF内蔵のJinjaチャットテンプレートを有効化
-    progressCallback: ({ loaded, total }) => {
-        if (total > 0) {
-            const pct = ((loaded / total) * 100).toFixed(1);
-            setStatus(`モデルをダウンロード中... ${pct}%`);
-        }
-    }
-});
-
-            setStatus('✅ モデル準備完了');
-            setUIEnabled(true);
-            addMessage('system', 'モデルの読み込みが完了しました。日本語で話しかけてください。');
-        } catch (err) {
-            console.error(err);
-            setStatus('❌ モデルの読み込みに失敗: ' + err.message);
-        }
-    }
-
-    // ===== ストリーミングチャンクからテキストを取り出す =====
-    function extractText(chunk) {
-        if (typeof chunk === 'string') return chunk;
-        if (chunk?.choices?.[0]?.text) return chunk.choices[0].text;
-        if (chunk?.choices?.[0]?.delta?.content) return chunk.choices[0].delta.content;
-        if (typeof chunk?.token === 'string') return chunk.token;
-        if (chunk?.data && typeof chunk.data === 'string') return chunk.data;
-        return '';
-    }
-
-    async function sendMessage() {
-    const text = userInput.value.trim();
-    if (!text || isGenerating) return;
-
-    userInput.value = '';
-    addMessage('user', text);
-    chatHistory.push({ role: 'user', content: text });
-
-    isGenerating = true;
-    setUIEnabled(false);
-
-    const assistantDiv = addMessage('assistant', '');
-    let fullResponse = '';
-
-    try {
-        const stream = await wllama.createChatCompletion({
-            messages: chatHistory,
-            max_tokens: 512,
-            // ★ LFM2.5-1.2B-JP 公式推奨パラメータ
-            temperature: 0.3,
-            min_p: 0.15,
-            repetition_penalty: 1.05,  // ※ 下記の注意点を参照
-            top_k: 40,
-            top_p: 0.9,
-            stream: true,
-        });
-
-        for await (const chunk of stream) {
-            const delta = chunk.choices?.[0]?.delta?.content || '';
-            if (delta) {
-                fullResponse += delta;
-                assistantDiv.textContent = fullResponse;
-                chatEl.scrollTop = chatEl.scrollHeight;
-            }
-        }
-
-        chatHistory.push({ role: 'assistant', content: fullResponse.trim() });
-
-        if (chatHistory.length > 20) {
-            chatHistory = [chatHistory[0], ...chatHistory.slice(-18)];
-        }
-    } catch (err) {
-        console.error(err);
-        assistantDiv.textContent = 'エラー: ' + err.message;
-    } finally {
-        isGenerating = false;
-        setUIEnabled(true);
-        userInput.focus();
-    }
+function addMsg(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.textContent = text;
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return div;
 }
 
-    // ===== イベント登録 =====
-    sendBtn.addEventListener('click', sendMessage);
-    userInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
+async function init() {
+  if (!('LanguageModel' in self)) {
+    statusEl.textContent = '❌ LanguageModel API が利用できません。Chromeのフラグを確認してください。';
+    return;
+  }
+  const avail = await LanguageModel.availability();
+  statusEl.textContent = 'ステータス: ' + avail;
 
-    initModel();
+  if (avail === 'unavailable') {
+    statusEl.textContent = '❌ この環境では利用できません。ハードウェア要件を確認してください。';
+    return;
+  }
+
+  statusEl.textContent = 'セッション作成中...（初回はモデルDLで数分かかります）';
+  session = await LanguageModel.create({
+    initialPrompts: [
+      { role: 'system', content: 'あなたは親切で丁寧な日本語アシスタントです。簡潔に答えてください。' }
+    ],
+    monitor(m) {
+      m.addEventListener('downloadprogress', e => {
+        statusEl.textContent = `モデルDL中: ${(e.loaded * 100).toFixed(1)}%`;
+      });
+    }
+  });
+
+  statusEl.textContent = '✅ 準備完了';
+  promptEl.disabled = false;
+  sendBtn.disabled = false;
+  promptEl.focus();
+  addMsg('system', '準備完了。日本語で話しかけてください。');
+}
+
+async function send() {
+  const text = promptEl.value.trim();
+  if (!text || !session) return;
+  promptEl.value = '';
+  addMsg('user', text);
+  sendBtn.disabled = true;
+
+  const assistantDiv = addMsg('assistant', '');
+  try {
+    const stream = session.promptStreaming(text);
+    for await (const chunk of stream) {
+      assistantDiv.textContent = chunk;
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+  } catch (e) {
+    assistantDiv.textContent = 'エラー: ' + e.message;
+  } finally {
+    sendBtn.disabled = false;
+    promptEl.focus();
+  }
+}
+
+sendBtn.addEventListener('click', send);
+promptEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter') send();
+});
+
+init();
 </script>
 </body>
 </html>
