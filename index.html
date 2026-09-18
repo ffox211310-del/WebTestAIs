@@ -3,120 +3,166 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>LFM 1.2B Chat</title>
 
 <style>
-    * {
-        box-sizing: border-box;
-    }
+* {
+    box-sizing: border-box;
+}
 
-    body {
-        margin: 0;
-        font-family: system-ui, sans-serif;
-        background: #f4f4f4;
-        color: #222;
-    }
+body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    background: #f4f4f4;
+    color: #222;
+}
 
-    header {
-        height: 56px;
-        display: flex;
-        align-items: center;
-        padding: 0 16px;
-        background: white;
-        border-bottom: 1px solid #ddd;
-        font-weight: bold;
-    }
+header {
+    background: white;
+    border-bottom: 1px solid #ddd;
+    padding: 12px 16px;
+}
 
-    #status {
-        margin-left: auto;
-        font-size: 13px;
-        color: #777;
-    }
+.headerTop {
+    display: flex;
+    align-items: center;
+    font-weight: bold;
+}
 
-    #chat {
-        max-width: 900px;
-        margin: auto;
-        padding: 20px 16px 100px;
-    }
+#status {
+    margin-left: auto;
+    font-size: 13px;
+    font-weight: normal;
+}
 
-    .message {
-        margin: 12px 0;
-        padding: 12px 15px;
-        border-radius: 14px;
-        white-space: pre-wrap;
-        line-height: 1.6;
-    }
+#details {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #777;
+}
 
-    .user {
-        background: #dff7f4;
-        margin-left: 15%;
-    }
+#progress {
+    margin-top: 8px;
+    width: 100%;
+    height: 5px;
+    background: #ddd;
+    border-radius: 5px;
+    overflow: hidden;
+}
 
-    .assistant {
-        background: white;
-        border: 1px solid #ddd;
-        margin-right: 15%;
-    }
+#progressBar {
+    width: 0%;
+    height: 100%;
+    background: #4fd1c5;
+    transition: width .2s;
+}
 
-    #inputArea {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: white;
-        border-top: 1px solid #ddd;
-        padding: 10px;
-    }
+#chat {
+    max-width: 900px;
+    margin: auto;
+    padding: 20px 16px 100px;
+}
 
-    #inputBox {
-        max-width: 900px;
-        margin: auto;
-        display: flex;
-        gap: 8px;
-    }
+.message {
+    margin: 12px 0;
+    padding: 12px 15px;
+    border-radius: 14px;
+    white-space: pre-wrap;
+    line-height: 1.6;
+}
 
-    textarea {
-        flex: 1;
-        resize: none;
-        min-height: 45px;
-        max-height: 140px;
-        padding: 11px;
-        border: 1px solid #ccc;
-        border-radius: 12px;
-        font-size: 16px;
-    }
+.user {
+    background: #dff7f4;
+    margin-left: 15%;
+}
 
-    button {
-        border: none;
-        border-radius: 12px;
-        padding: 0 18px;
-        background: #4fd1c5;
-        color: white;
-        font-weight: bold;
-        font-size: 15px;
-    }
+.assistant {
+    background: white;
+    border: 1px solid #ddd;
+    margin-right: 15%;
+}
 
-    button:disabled {
-        opacity: .5;
-    }
+#inputArea {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid #ddd;
+    padding: 10px;
+}
+
+#inputBox {
+    max-width: 900px;
+    margin: auto;
+    display: flex;
+    gap: 8px;
+}
+
+textarea {
+    flex: 1;
+    resize: none;
+    min-height: 45px;
+    max-height: 140px;
+    padding: 11px;
+    border: 1px solid #ccc;
+    border-radius: 12px;
+    font-size: 16px;
+}
+
+button {
+    border: none;
+    border-radius: 12px;
+    padding: 0 18px;
+    background: #4fd1c5;
+    color: white;
+    font-weight: bold;
+}
+
+button:disabled {
+    opacity: .5;
+}
 </style>
 </head>
 
 <body>
 
 <header>
-    LFM 1.2B Chat
-    <span id="status">モデル未ロード</span>
+
+    <div class="headerTop">
+        LFM 1.2B Chat
+        <span id="status">起動中...</span>
+    </div>
+
+    <div id="details">
+        エンジン確認中...
+    </div>
+
+    <div id="progress">
+        <div id="progressBar"></div>
+    </div>
+
 </header>
 
 <div id="chat"></div>
 
 <div id="inputArea">
     <div id="inputBox">
-        <textarea id="input" placeholder="メッセージを入力..." disabled></textarea>
-        <button id="send" disabled>送信</button>
+
+        <textarea
+            id="input"
+            placeholder="メッセージを入力..."
+            disabled
+        ></textarea>
+
+        <button id="send" disabled>
+            送信
+        </button>
+
     </div>
 </div>
+
 
 <script type="module">
 
@@ -125,9 +171,13 @@ import {
     TextStreamer
 } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
 
-const MODEL = "onnx-community/LFM2-1.2B-ONNX";
+
+const MODEL =
+    "onnx-community/LFM2-1.2B-ONNX";
+
 
 let generator = null;
+
 let messages = [
     {
         role: "system",
@@ -136,61 +186,200 @@ let messages = [
     }
 ];
 
-const chat = document.getElementById("chat");
-const input = document.getElementById("input");
-const send = document.getElementById("send");
-const status = document.getElementById("status");
+
+const chat =
+    document.getElementById("chat");
+
+const input =
+    document.getElementById("input");
+
+const send =
+    document.getElementById("send");
+
+const status =
+    document.getElementById("status");
+
+const details =
+    document.getElementById("details");
+
+const progressBar =
+    document.getElementById("progressBar");
+
+
+/* -------------------------
+   メッセージ表示
+------------------------- */
 
 function addMessage(role, text) {
 
-    const div = document.createElement("div");
+    const div =
+        document.createElement("div");
 
     div.className =
         "message " +
-        (role === "user" ? "user" : "assistant");
+        (role === "user"
+            ? "user"
+            : "assistant");
 
     div.textContent = text;
 
     chat.appendChild(div);
 
     window.scrollTo({
-        top: document.body.scrollHeight,
-        behavior: "smooth"
+        top: document.body.scrollHeight
     });
 
     return div;
 }
 
+
+/* -------------------------
+   WebGPU確認
+------------------------- */
+
+async function checkDevice() {
+
+    if ("gpu" in navigator) {
+
+        try {
+
+            const adapter =
+                await navigator.gpu.requestAdapter();
+
+            if (adapter) {
+
+                details.textContent =
+                    "エンジン: Transformers.js / WebGPU";
+
+                return "webgpu";
+            }
+
+        } catch (e) {}
+    }
+
+    details.textContent =
+        "エンジン: Transformers.js / WASM";
+
+    return "wasm";
+}
+
+
+/* -------------------------
+   モデル読み込み
+------------------------- */
+
 async function loadModel() {
 
-    status.textContent = "LFM 1.2B 読み込み中...";
+    status.textContent =
+        "モデル確認中...";
+
+    progressBar.style.width =
+        "0%";
+
+
+    const device =
+        await checkDevice();
+
+
+    status.textContent =
+        "モデル読み込み中...";
+
+    details.textContent =
+        `LFM 1.2B / ${device.toUpperCase()}`;
+
 
     try {
 
-        generator = await pipeline(
-            "text-generation",
-            MODEL,
-            {
-                dtype: "q4",
-                device: "webgpu"
-            }
-        );
+        generator =
+            await pipeline(
+                "text-generation",
+                MODEL,
+                {
+                    dtype: "q4",
+                    device: device,
 
-        status.textContent = "準備完了";
+                    progress_callback:
+                        (progress) => {
+
+                            console.log(
+                                "MODEL LOAD:",
+                                progress
+                            );
+
+                            /*
+                             * Transformers.js の
+                             * ダウンロード進捗
+                             */
+
+                            if (
+                                progress &&
+                                typeof progress.progress
+                                    === "number"
+                            ) {
+
+                                const p =
+                                    Math.min(
+                                        100,
+                                        Math.max(
+                                            0,
+                                            progress.progress
+                                        )
+                                    );
+
+                                progressBar.style.width =
+                                    p + "%";
+
+                                if (
+                                    progress.file
+                                ) {
+
+                                    details.textContent =
+                                        `読み込み中: ${progress.file} (${Math.round(p)}%)`;
+
+                                } else {
+
+                                    details.textContent =
+                                        `モデル読み込み中 (${Math.round(p)}%)`;
+                                }
+                            }
+                        }
+                }
+            );
+
+
+        progressBar.style.width =
+            "100%";
+
+        status.textContent =
+            "準備完了";
+
+        details.textContent =
+            `LFM 1.2B / ${device.toUpperCase()} / 推論可能`;
+
 
         input.disabled = false;
         send.disabled = false;
+
 
         addMessage(
             "assistant",
             "こんにちは！LFM 1.2Bやで。"
         );
 
+
     } catch (error) {
 
         console.error(error);
 
-        status.textContent = "読み込み失敗";
+        status.textContent =
+            "読み込み失敗";
+
+        details.textContent =
+            error.message;
+
+        progressBar.style.width =
+            "0%";
+
 
         addMessage(
             "assistant",
@@ -200,113 +389,249 @@ async function loadModel() {
     }
 }
 
+
+/* -------------------------
+   生成
+------------------------- */
+
 async function generate() {
 
-    const text = input.value.trim();
+    const text =
+        input.value.trim();
 
-    if (!text || !generator) return;
+    if (!text || !generator)
+        return;
+
 
     input.value = "";
 
-    addMessage("user", text);
+    addMessage(
+        "user",
+        text
+    );
+
 
     messages.push({
         role: "user",
         content: text
     });
 
+
     send.disabled = true;
     input.disabled = true;
 
-    const answerDiv = addMessage(
-        "assistant",
-        "..."
-    );
+
+    status.textContent =
+        "生成中...";
+
+    details.textContent =
+        "推論を実行しています";
+
+
+    const answerDiv =
+        addMessage(
+            "assistant",
+            "..."
+        );
+
 
     let answer = "";
 
+    let tokenCount = 0;
+
+    const startTime =
+        performance.now();
+
+
     try {
 
-        const streamer = new TextStreamer(
-            generator.tokenizer,
-            {
-                skip_prompt: true,
-                skip_special_tokens: true,
+        const streamer =
+            new TextStreamer(
+                generator.tokenizer,
+                {
 
-                callback_function: (token) => {
+                    skip_prompt: true,
 
-                    answer += token;
+                    skip_special_tokens: true,
 
-                    answerDiv.textContent = answer;
+                    callback_function:
+                        (token) => {
 
-                    window.scrollTo({
-                        top: document.body.scrollHeight
-                    });
+                            answer += token;
+
+                            tokenCount++;
+
+
+                            answerDiv.textContent =
+                                answer;
+
+
+                            const elapsed =
+                                (
+                                    performance.now()
+                                    - startTime
+                                ) / 1000;
+
+
+                            const speed =
+                                elapsed > 0
+                                    ? (
+                                        tokenCount /
+                                        elapsed
+                                    ).toFixed(1)
+                                    : "0";
+
+
+                            status.textContent =
+                                "生成中...";
+
+                            details.textContent =
+                                `${tokenCount} tokens / ${speed} tok/s`;
+
+
+                            window.scrollTo({
+                                top:
+                                    document.body
+                                    .scrollHeight
+                            });
+                        }
                 }
-            }
-        );
+            );
 
-        const output = await generator(
-            messages,
-            {
-                max_new_tokens: 256,
-                do_sample: true,
-                temperature: 0.7,
-                top_p: 0.9,
-                streamer
-            }
-        );
 
-        // ストリーマーで取得できなかった場合の保険
+        const output =
+            await generator(
+                messages,
+                {
+
+                    max_new_tokens: 256,
+
+                    do_sample: true,
+
+                    temperature: 0.7,
+
+                    top_p: 0.9,
+
+                    streamer
+                }
+            );
+
+
         if (!answer) {
 
             const generated =
                 output[0].generated_text;
 
-            if (Array.isArray(generated)) {
+
+            if (
+                Array.isArray(generated)
+            ) {
 
                 answer =
-                    generated[generated.length - 1].content;
+                    generated[
+                        generated.length - 1
+                    ].content;
 
             } else {
 
-                answer = String(generated);
+                answer =
+                    String(generated);
             }
 
-            answerDiv.textContent = answer;
+
+            answerDiv.textContent =
+                answer;
         }
+
+
+        const elapsed =
+            (
+                performance.now()
+                - startTime
+            ) / 1000;
+
+
+        const speed =
+            elapsed > 0
+                ? (
+                    tokenCount /
+                    elapsed
+                ).toFixed(1)
+                : "0";
+
+
+        status.textContent =
+            "準備完了";
+
+
+        details.textContent =
+            `${tokenCount} tokens / ${speed} tok/s / ${elapsed.toFixed(1)}秒`;
+
 
         messages.push({
             role: "assistant",
             content: answer
         });
 
+
     } catch (error) {
 
         console.error(error);
 
+
+        status.textContent =
+            "生成エラー";
+
+        details.textContent =
+            error.message;
+
+
         answerDiv.textContent =
-            "生成エラー: " + error.message;
+            "生成エラー: " +
+            error.message;
+
 
         messages.pop();
     }
 
+
     send.disabled = false;
     input.disabled = false;
+
     input.focus();
 }
 
-send.addEventListener("click", generate);
 
-input.addEventListener("keydown", (e) => {
+/* -------------------------
+   Enter
+------------------------- */
 
-    if (e.key === "Enter" && !e.shiftKey) {
+send.addEventListener(
+    "click",
+    generate
+);
 
-        e.preventDefault();
 
-        generate();
+input.addEventListener(
+    "keydown",
+    (e) => {
+
+        if (
+            e.key === "Enter" &&
+            !e.shiftKey
+        ) {
+
+            e.preventDefault();
+
+            generate();
+        }
     }
-});
+);
+
+
+/* -------------------------
+   起動
+------------------------- */
 
 loadModel();
 
