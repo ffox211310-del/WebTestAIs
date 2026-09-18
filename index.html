@@ -106,16 +106,17 @@
             setStatus('モデルをダウンロード中... (初回は約700MB)');
 
             await wllama.loadModelFromUrl({ url: MODEL_URL }, {
-                n_ctx: 4096,
-                n_batch: 512,
-                n_threads: navigator.hardwareConcurrency || 4,
-                progressCallback: ({ loaded, total }) => {
-                    if (total > 0) {
-                        const pct = ((loaded / total) * 100).toFixed(1);
-                        setStatus(`モデルをダウンロード中... ${pct}%`);
-                    }
-                }
-            });
+    n_ctx: 4096,
+    n_batch: 512,
+    n_threads: navigator.hardwareConcurrency || 4,
+    jinja: true,  // ★ GGUF内蔵のJinjaチャットテンプレートを有効化
+    progressCallback: ({ loaded, total }) => {
+        if (total > 0) {
+            const pct = ((loaded / total) * 100).toFixed(1);
+            setStatus(`モデルをダウンロード中... ${pct}%`);
+        }
+    }
+});
 
             setStatus('✅ モデル準備完了');
             setUIEnabled(true);
@@ -136,8 +137,7 @@
         return '';
     }
 
-    // ===== チャット送信 =====
-async function sendMessage() {
+    async function sendMessage() {
     const text = userInput.value.trim();
     if (!text || isGenerating) return;
 
@@ -152,24 +152,20 @@ async function sendMessage() {
     let fullResponse = '';
 
     try {
-        const prompt = buildPrompt(chatHistory);
-
-        const stream = await wllama.createCompletion({
-            prompt: prompt,
+        const stream = await wllama.createChatCompletion({
+            messages: chatHistory,
             max_tokens: 512,
-            // ★ 公式推奨パラメータ
-            temperature: 0.3,          // 低めで安定した生成
-            min_p: 0.15,               // 低確率トークンを除外
-            repetition_penalty: 1.05,  // 繰り返し抑制
+            // ★ LFM2.5-1.2B-JP 公式推奨パラメータ
+            temperature: 0.3,
+            min_p: 0.15,
+            repetition_penalty: 1.05,  // ※ 下記の注意点を参照
             top_k: 40,
             top_p: 0.9,
-            // ★ 停止トークン
-            stop: ['<|im_end|>', '<|im_start|>', '<|startoftext|>'],
             stream: true,
         });
 
         for await (const chunk of stream) {
-            const delta = extractText(chunk);
+            const delta = chunk.choices?.[0]?.delta?.content || '';
             if (delta) {
                 fullResponse += delta;
                 assistantDiv.textContent = fullResponse;
