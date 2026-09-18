@@ -137,59 +137,60 @@
     }
 
     // ===== チャット送信 =====
-    async function sendMessage() {
-        const text = userInput.value.trim();
-        if (!text || isGenerating) return;
+async function sendMessage() {
+    const text = userInput.value.trim();
+    if (!text || isGenerating) return;
 
-        userInput.value = '';
-        addMessage('user', text);
-        chatHistory.push({ role: 'user', content: text });
+    userInput.value = '';
+    addMessage('user', text);
+    chatHistory.push({ role: 'user', content: text });
 
-        isGenerating = true;
-        setUIEnabled(false);
+    isGenerating = true;
+    setUIEnabled(false);
 
-        const assistantDiv = addMessage('assistant', '');
-        let fullResponse = '';
+    const assistantDiv = addMessage('assistant', '');
+    let fullResponse = '';
 
-        try {
-            const prompt = buildPrompt(chatHistory);
+    try {
+        const prompt = buildPrompt(chatHistory);
 
-            const stream = await wllama.createCompletion({
-                prompt: prompt,
-                max_tokens: 512,
-                temperature: 0.7,
-                top_k: 40,
-                top_p: 0.9,
-                // モデルが会話終了トークンを吐いたら止める
-                stop: ['<|im_end|>', '<|im_start|>', '<|startoftext|>'],
-                stream: true,
-            });
+        const stream = await wllama.createCompletion({
+            prompt: prompt,
+            max_tokens: 512,
+            // ★ 公式推奨パラメータ
+            temperature: 0.3,          // 低めで安定した生成
+            min_p: 0.15,               // 低確率トークンを除外
+            repetition_penalty: 1.05,  // 繰り返し抑制
+            top_k: 40,
+            top_p: 0.9,
+            // ★ 停止トークン
+            stop: ['<|im_end|>', '<|im_start|>', '<|startoftext|>'],
+            stream: true,
+        });
 
-            for await (const chunk of stream) {
-                const delta = extractText(chunk);
-                if (delta) {
-                    fullResponse += delta;
-                    assistantDiv.textContent = fullResponse;
-                    chatEl.scrollTop = chatEl.scrollHeight;
-                }
+        for await (const chunk of stream) {
+            const delta = extractText(chunk);
+            if (delta) {
+                fullResponse += delta;
+                assistantDiv.textContent = fullResponse;
+                chatEl.scrollTop = chatEl.scrollHeight;
             }
-
-            // 応答を履歴に追加
-            chatHistory.push({ role: 'assistant', content: fullResponse.trim() });
-
-            // 履歴が長すぎたら system + 直近のみ残す
-            if (chatHistory.length > 20) {
-                chatHistory = [chatHistory[0], ...chatHistory.slice(-18)];
-            }
-        } catch (err) {
-            console.error(err);
-            assistantDiv.textContent = 'エラー: ' + err.message;
-        } finally {
-            isGenerating = false;
-            setUIEnabled(true);
-            userInput.focus();
         }
+
+        chatHistory.push({ role: 'assistant', content: fullResponse.trim() });
+
+        if (chatHistory.length > 20) {
+            chatHistory = [chatHistory[0], ...chatHistory.slice(-18)];
+        }
+    } catch (err) {
+        console.error(err);
+        assistantDiv.textContent = 'エラー: ' + err.message;
+    } finally {
+        isGenerating = false;
+        setUIEnabled(true);
+        userInput.focus();
     }
+}
 
     // ===== イベント登録 =====
     sendBtn.addEventListener('click', sendMessage);
