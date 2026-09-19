@@ -1,106 +1,203 @@
 <!DOCTYPE html>
 <html lang="ja">
-<head>
-<meta charset="UTF-8">
-<title>Chrome Built-in AI Chat</title>
-<style>
-  body { font-family: sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
-  #chat { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; height: 400px; overflow-y: auto; margin-bottom: 1rem; }
-  .msg { margin: 0.5rem 0; padding: 0.5rem 0.8rem; border-radius: 8px; white-space: pre-wrap; }
-  .user { background: #e3f2fd; text-align: right; }
-  .assistant { background: #f5f5f5; }
-  .system { color: #888; font-size: 0.85em; text-align: center; }
-  #input-area { display: flex; gap: 0.5rem; }
-  #prompt { flex: 1; padding: 0.6rem; border: 1px solid #ccc; border-radius: 6px; }
-  button { padding: 0.6rem 1.2rem; border: none; background: #1a73e8; color: #fff; border-radius: 6px; cursor: pointer; }
-  button:disabled { opacity: 0.5; cursor: default; }
+<head><style>
+@font-face {
+  font-family: "Optimistic";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/OptimisticAI_VF_Optimized.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Optimistic Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/OptimisticMono_W_TextRegular.woff2") format("woff2");
+}
+:where(html) {
+  font-family: "Optimistic", system-ui, sans-serif;
+}
+:where(code, pre, kbd, samp) {
+  font-family: "Optimistic Mono", ui-monospace, monospace;
+}
 </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CronyGO MediaPipe 試作 - v0.1</title>
+<style>
+:root { --bg:#0a0a0a; --bg-input:#171717; --border:#2a2a2a; --text:#fff; --accent:#4FD1C5; --text-sub:#888; }
+* { box-sizing:border-box; }
+body { margin:0; font-family:Inter, system-ui, sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100dvh; }
+header { height:48px; padding:0 12px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:#000; }
+select, button { background:var(--bg-input); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px 12px; font-size:12px; }
+button.primary { background:var(--accent); color:#000; font-weight:700; border:0; }
+#progress-wrap { height:3px; background:#1e1e1e; }
+#progress-bar { height:100%; width:0%; background:var(--accent); transition:width .2s; }
+#chat { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+.msg { max-width:85%; padding:12px 14px; border-radius:8px; font-size:14px; line-height:1.6; white-space:pre-wrap; }
+.msg.user { align-self:flex-end; background:var(--accent); color:#000; font-weight:600; }
+.msg.assistant { align-self:flex-start; background:var(--bg-input); border:1px solid var(--border); }
+.msg.system { align-self:center; font-size:11px; color:var(--text-sub); }
+#composer { padding:10px 12px; border-top:1px solid var(--border); display:flex; gap:8px; }
+#input { flex:1; background:var(--bg-input); border:1px solid var(--border); border-radius:8px; padding:11px 14px; color:var(--text); font-size:15px; outline:none; }
+#input:focus { border-color:var(--accent); }
+.hint { font-size:10px; color:#666; text-align:center; padding:6px; line-height:1.4; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "@mediapipe/tasks-genai": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@0.10.14/+esm"
+  }
+}
+</script>
 </head>
 <body>
-<h1>Chrome Built-in AI</h1>
-<div id="status">初期化中...</div>
-<div id="chat"></div>
-<div id="input-area">
-  <input id="prompt" placeholder="メッセージを入力..." disabled>
+<header>
+  <div style="display:flex; gap:8px; align-items:center;">
+    <span style="font-weight:700;">CronyGO MediaPipe 試作</span>
+    <select id="model-select">
+      <option value="gemma2-2b-gpu-int4">Gemma2 2B GPU int4 (推奨・爆速)</option>
+      <option value="gemma2-2b-cpu-int4">Gemma2 2B CPU int4 (互換性重視)</option>
+      <option value="gemma-2b-gpu-int4">Gemma 2B GPU int4 (旧版)</option>
+    </select>
+  </div>
+  <div style="display:flex; gap:8px; align-items:center;">
+    <button id="dl-btn" class="primary">モデルDL</button>
+    <span id="status" style="font-size:11px; opacity:0.7;">未DL</span>
+  </div>
+</header>
+<div id="progress-wrap"><div id="progress-bar"></div></div>
+<div id="chat">
+  <div class="msg system">Google MediaPipe LLM Inference 試作<br>・Gemma2 2Bがブラウザでネイティブに動きます<br>・初回は1.4GB DL、2回目はキャッシュから爆速<br>・WllamaよりGPUデリゲートが効いて速いかも？</div>
+  <div class="msg assistant">こんにちは！MediaPipe版CronyGOです。モデルをダウンロードしてから防災について聞いてみて。オフラインで動くよ。</div>
+</div>
+<div class="hint">
+  エンジン: MediaPipe Tasks GenAI 0.10.14 + LiteRT + GPUデリゲート<br>
+  モデル: https://storage.googleapis.com/mediapipe-tasks/llm_inference/gemma2-2b-it-gpu-int4.bin<br>
+  WebLLM/Wllamaより速いかベンチ取ってみよう
+</div>
+<div id="composer">
+  <input id="input" type="text" placeholder="モデルをDLしてください" disabled />
   <button id="send" disabled>送信</button>
 </div>
 
-<script>
-const statusEl = document.getElementById('status');
-const chatEl = document.getElementById('chat');
-const promptEl = document.getElementById('prompt');
-const sendBtn = document.getElementById('send');
-let session = null;
+<script type="module">
+import { FilesetResolver, LlmInference } from "@mediapipe/tasks-genai";
 
-function addMsg(role, text) {
-  const div = document.createElement('div');
-  div.className = 'msg ' + role;
+const MODEL_MAP = {
+  "gemma2-2b-gpu-int4": "https://storage.googleapis.com/mediapipe-tasks/llm_inference/gemma2-2b-it-gpu-int4.bin",
+  "gemma2-2b-cpu-int4": "https://storage.googleapis.com/mediapipe-tasks/llm_inference/gemma2-2b-it-cpu-int4.bin",
+  "gemma-2b-gpu-int4": "https://storage.googleapis.com/mediapipe-tasks/llm_inference/gemma-2b-it-gpu-int4.bin",
+};
+
+const chatEl = document.getElementById("chat");
+const inputEl = document.getElementById("input");
+const sendBtn = document.getElementById("send");
+const dlBtn = document.getElementById("dl-btn");
+const statusEl = document.getElementById("status");
+const progressBar = document.getElementById("progress-bar");
+const modelSelect = document.getElementById("model-select");
+
+let llm = null;
+let fileset = null;
+let messages = [
+  { role: "system", content: "あなたはCronyGO、防災AIアシスタントです。日本語で簡潔に答えてください。" }
+];
+
+function addMsg(role, text){
+  const div = document.createElement("div");
+  div.className = `msg ${role}`;
   div.textContent = text;
   chatEl.appendChild(div);
   chatEl.scrollTop = chatEl.scrollHeight;
   return div;
 }
-
-async function init() {
-  if (!('LanguageModel' in self)) {
-    statusEl.textContent = '❌ LanguageModel API が利用できません。Chromeのフラグを確認してください。';
-    return;
-  }
-  const avail = await LanguageModel.availability();
-  statusEl.textContent = 'ステータス: ' + avail;
-
-  if (avail === 'unavailable') {
-    statusEl.textContent = '❌ この環境では利用できません。ハードウェア要件を確認してください。';
-    return;
-  }
-
-  statusEl.textContent = 'セッション作成中...（初回はモデルDLで数分かかります）';
-  session = await LanguageModel.create({
-    initialPrompts: [
-      { role: 'system', content: 'あなたは親切で丁寧な日本語アシスタントです。簡潔に答えてください。' }
-    ],
-    monitor(m) {
-      m.addEventListener('downloadprogress', e => {
-        statusEl.textContent = `モデルDL中: ${(e.loaded * 100).toFixed(1)}%`;
-      });
-    }
-  });
-
-  statusEl.textContent = '✅ 準備完了';
-  promptEl.disabled = false;
-  sendBtn.disabled = false;
-  promptEl.focus();
-  addMsg('system', '準備完了。日本語で話しかけてください。');
+function setProgress(pct, txt){
+  progressBar.style.width = `${pct}%`;
+  if(txt) statusEl.textContent = txt;
 }
 
-async function send() {
-  const text = promptEl.value.trim();
-  if (!text || !session) return;
-  promptEl.value = '';
-  addMsg('user', text);
+function convertToPrompt(msgs){
+  let p = "";
+  for(const m of msgs){
+    if(m.role === "system" || m.role === "user"){
+      p += `<start_of_turn>user\n${m.content}<end_of_turn>\n`;
+    } else if(m.role === "assistant"){
+      p += `<start_of_turn>model\n${m.content}<end_of_turn>\n`;
+    }
+  }
+  p += `<start_of_turn>model\n`;
+  return p;
+}
+
+dlBtn.addEventListener("click", async ()=>{
+  const key = modelSelect.value;
+  const url = MODEL_MAP[key];
+  dlBtn.disabled = true;
+  inputEl.disabled = true;
   sendBtn.disabled = true;
-
-  const assistantDiv = addMsg('assistant', '');
-  try {
-    const stream = session.promptStreaming(text);
-    for await (const chunk of stream) {
-      assistantDiv.textContent = chunk;
-      chatEl.scrollTop = chatEl.scrollHeight;
-    }
-  } catch (e) {
-    assistantDiv.textContent = 'エラー: ' + e.message;
-  } finally {
+  setProgress(5, "WASM DL中...");
+  try{
+    fileset = await FilesetResolver.forGenAiTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@0.10.14/wasm"
+    );
+    setProgress(20, "モデルDL中... 1.4GBなので初回は数分かかります");
+    // 注意: MediaPipeは内部でfetchするので進捗は取れない
+    llm = await LlmInference.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: url },
+      maxTokens: 512,
+      topK: 40,
+      temperature: 0.7,
+      randomSeed: 42,
+    });
+    setProgress(100, "準備完了 - 爆速です");
+    addMsg("system", `${key} 準備完了。防災について聞いてみて。`);
+    inputEl.disabled = false;
     sendBtn.disabled = false;
-    promptEl.focus();
+    inputEl.placeholder = "メッセージを入力...";
+    setTimeout(()=>{ progressBar.style.width="0%"; }, 1000);
+  }catch(e){
+    console.error(e);
+    setProgress(0, "エラー: " + e.message);
+    addMsg("system", "DL失敗: " + e.message + "\nCross-Originの関係でローカルでしか動かない場合があります。GitHub Pages等で試してください。");
+  }finally{
+    dlBtn.disabled = false;
   }
-}
-
-sendBtn.addEventListener('click', send);
-promptEl.addEventListener('keydown', e => {
-  if (e.key === 'Enter') send();
 });
 
-init();
+async function send(){
+  const text = inputEl.value.trim();
+  if(!text || !llm) return;
+  addMsg("user", text);
+  messages.push({ role:"user", content:text });
+  inputEl.value = "";
+  const assistantDiv = addMsg("assistant", "");
+  let full = "";
+  try{
+    const prompt = convertToPrompt(messages);
+    const start = performance.now();
+    const response = await llm.generateResponse(prompt);
+    const elapsed = ((performance.now()-start)/1000).toFixed(2);
+    // 疑似ストリーミング
+    for(let i=0; i<response.length; i+=8){
+      full = response.slice(0, i+8);
+      assistantDiv.textContent = full;
+      chatEl.scrollTop = chatEl.scrollHeight;
+      await new Promise(r=>setTimeout(r, 16));
+    }
+    full = response;
+    assistantDiv.textContent = full + `\n\n[${elapsed}s]`;
+    messages.push({ role:"assistant", content:full });
+  }catch(e){
+    assistantDiv.textContent = "生成エラー: " + e.message;
+  }
+}
+
+sendBtn.addEventListener("click", send);
+inputEl.addEventListener("keydown", e=>{
+  if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); send(); }
+});
 </script>
-</body>
+<script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}function isInlineMediaSlotElement(node){return !!(node&&node.getAttribute&&node.getAttribute("data-clippy-inline-media-slot")!==null)}function findInlineMediaSlot(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(isInlineMediaSlotElement(node))return node}return null}function readInlineMediaUrl(node){if(!node)return null;return node.getAttribute&&((node.getAttribute("data-clippy-inline-media-url")||node.getAttribute("data-url")||node.getAttribute("data_url")))||node.href||null}function stripHash(url){return String(url).replace(/#.*$/,"")}function urlsMatch(a,b){if(!a||!b)return false;try{return stripHash(new URL(a,loc).href)===stripHash(new URL(b,loc).href)}catch(_){return stripHash(a)===stripHash(b)}}function isFirstPartyReelUrl(value){try{var url=new URL(value,loc);if(url.protocol!=="https:")return false;var host=url.hostname.toLowerCase();var supported=host==="instagram.com"||host.endsWith(".instagram.com")||host==="facebook.com"||host.endsWith(".facebook.com");return supported&&/\/reels?\//i.test(url.pathname)}catch(_){return false}}function isInlineMediaUrlClick(node,href){var slot=findInlineMediaSlot(node);if(!slot)return false;var slotUrl=readInlineMediaUrl(slot);if(slotUrl)return urlsMatch(href,slotUrl);return isFirstPartyReelUrl(href)}function findDataHref(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(node.getAttribute){var href=node.getAttribute("data-href")||node.getAttribute("data-url");if(href)return{href:href,node:node}}}return null}var nativeOpen=window.open;window.open=function(url){if(parent!==window&&typeof url==="string"&&/^https?:\/\//.test(url)){parent.postMessage({type:"ecto:usercontent-link-click",href:url},"*");return null}return nativeOpen?nativeOpen.apply(window,arguments):null};document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;if(parent===window)return;var a=target.closest?target.closest("a[href]"):null;if(a&&a.href&&/^https?:\/\//.test(a.href)&&a.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(a,a.href))return;var productId=extractProductId(target)||extractProductId(a);if(productId){e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*");return}e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:a.href},"*");return}var dataHref=findDataHref(target);if(dataHref&&/^https?:\/\//.test(dataHref.href)&&dataHref.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(dataHref.node,dataHref.href))return;e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:dataHref.href},"*")}},true)})();</script><script>(function(){var FOCUS_TYPE="ecto:artifact-focus-request";var CLOSE_TYPE="ecto:artifact-close-request";function focusArtifactDocument(){var body=document.body;if(!body)return;try{window.focus();}catch(e){}if(!body.hasAttribute("tabindex"))body.setAttribute("tabindex","-1");try{body.focus({preventScroll:true});}catch(e){try{body.focus();}catch(e2){}}}window.addEventListener("message",function(event){if(event.source!==window.parent)return;var data=event.data;if(!data||typeof data!=="object"||data.type!==FOCUS_TYPE)return;if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",focusArtifactDocument,{once:true});return;}focusArtifactDocument();});window.addEventListener("keydown",function(event){if(event.key!=="Escape")return;window.setTimeout(function(){if(event.defaultPrevented)return;window.parent.postMessage({type:CLOSE_TYPE},"*");},0);});})();</script></body>
 </html>
