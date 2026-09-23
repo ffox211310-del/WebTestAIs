@@ -21,3 +21,307 @@
   * { box-sizing: border-box; }
   body {
     margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 16px; line-height: 1.5; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button:hover:not(:disabled) { background: var(--accent-hover); }
+  button:disabled { background: #3a3f4a; color: #767c88; cursor: not-allowed; }
+  button.secondary { background: #2a2f3a; }
+  button.secondary:hover:not(:disabled) { background: #363c49; }
+  .status-line { font-size: 0.85rem; color: var(--muted); margin-top: 10px; }
+  .progress-outer {
+    width: 100%; height: 10px; border-radius: 6px;
+    background: #232733; overflow: hidden; margin-top: 10px;
+  }
+  .progress-inner {
+    height: 100%; width: 0%; background: var(--accent);
+    transition: width 0.15s ease;
+  }
+  .error-box {
+    display: none;
+    margin-top: 12px;
+    background: var(--err-bg);
+    border: 1px solid var(--err-border);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.82rem;
+    color: var(--err-text);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .error-box .hint { color: #ffd3d7; margin-top: 6px; font-weight: 600; }
+  .chat {
+    display: flex; flex-direction: column; gap: 10px;
+    max-height: 40vh; overflow-y: auto; margin-bottom: 10px;
+  }
+  .msg { padding: 10px 12px; border-radius: 10px; font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; }
+  .msg.user { background: #1f2a44; align-self: flex-end; }
+  .msg.assistant { background: #1c2028; border: 1px solid var(--border); }
+  textarea {
+    width: 100%; min-height: 60px; resize: vertical;
+    background: #10131a; color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+    font-family: inherit; font-size: 0.9rem;
+  }
+  .badge {
+    display: inline-block; font-size: 0.72rem; padding: 2px 8px;
+    border-radius: 999px; background: #232733; color: var(--muted); margin-left: 6px;
+  }
+  .badge.ready { background: #12321f; color: var(--ok); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Wllama + Qwen2.5-1.5B-Instruct <span id="statusBadge" class="badge">未ロード</span></h1>
+  <p class="sub">
+    <a href="https://github.com/ngxson/wllama" target="_blank" style="color:var(--accent)">Wllama</a>
+    (llama.cpp の WebAssembly版) を使い、Hugging Face の
+    <b>Qwen/Qwen2.5-1.5B-Instruct-GGUF</b> (Q4_K_M, 約1GB) をブラウザ内で直接ダウンロードして推論します。
+    サーバー送信なし・完全ローカル実行です。初回ダウンロードには数十秒〜数分かかります。
+  </p>
+
+  <div class="panel">
+    <div class="row">
+      <button id="loadBtn">モデルをダウンロードして実行</button>
+      <button id="unloadBtn" class="secondary" disabled>モデルを解放</button>
+    </div>
+    <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
+    <div class="status-line" id="statusLine">ボタンを押すとダウンロードが始まります。</div>
+    <div class="error-box" id="errorBox"></div>
+  </div>
+
+  <div class="panel">
+    <div class="chat" id="chat"></div>
+    <textarea id="input" placeholder="モデルロード後にメッセージを入力…" disabled></textarea>
+    <div class="row" style="margin-top:8px;">
+      <button id="sendBtn" disabled>送信</button>
+      <button id="stopBtn" class="secondary" disabled>停止</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { Wllama } from "https://cdn.jsdelivr.net/npm/@wllama/wllama@2.3.1/esm/index.js";
+
+const CONFIG_PATHS = {
+  "single-thread/wllama.wasm": "https://cdn.jsdelivr.net/npm/@wllama/wllama@2.3.1/esm/single-thread/wllama.wasm",
+  "multi-thread/wllama.wasm": "https://cdn.jsdelivr.net/npm/@wllama/wllama@2.3.1/esm/multi-thread/wllama.wasm",
+};
+
+const MODEL = {
+  repo: "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+  file: "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+};
+
+const $loadBtn = document.getElementById("loadBtn");
+const $unloadBtn = document.getElementById("unloadBtn");
+const $progress = document.getElementById("progressBar");
+const $status = document.getElementById("statusLine");
+const $errorBox = document.getElementById("errorBox");
+const $badge = document.getElementById("statusBadge");
+const $chat = document.getElementById("chat");
+const $input = document.getElementById("input");
+const $sendBtn = document.getElementById("sendBtn");
+const $stopBtn = document.getElementById("stopBtn");
+
+let wllama = null;
+let history = [];
+let stopRequested = false;
+
+function setStatus(text) {
+  $status.textContent = text;
+}
+
+function setBadge(text, ready) {
+  $badge.textContent = text;
+  $badge.classList.toggle("ready", !!ready);
+}
+
+function showError(err, context) {
+  console.error(context, err);
+  const name = err && err.name ? err.name : "Error";
+  const message = err && err.message ? err.message : String(err);
+  let hint = "";
+
+  const msg = (message || "").toLowerCase();
+  if (msg.includes("failed to fetch") || msg.includes("networkerror") || msg.includes("cors")) {
+    hint = "ヒント: ネットワーク接続、または Hugging Face / jsDelivr へのアクセスがブロックされている可能性があります(社内プロキシ・広告ブロッカー・オフライン等を確認してください)。";
+  } else if (msg.includes("out of memory") || msg.includes("oom") || msg.includes("memory access out of bounds")) {
+    hint = "ヒント: メモリ不足の可能性があります。他のタブを閉じる、またはPC/スマホのメモリに余裕がある環境で再試行してください。";
+  } else if (msg.includes("sharedarraybuffer") || msg.includes("crossoriginisolated")) {
+    hint = "ヒント: マルチスレッド実行に必要な機能が無効です(file://で開いた場合など)。自動的にシングルスレッド版にフォールバックされますが、動作しない場合はローカルサーバー経由(http://localhost)で開いてみてください。";
+  } else if (msg.includes("wasm") && (msg.includes("unsupported") || msg.includes("not supported"))) {
+    hint = "ヒント: このブラウザは WebAssembly の必要機能に対応していない可能性があります。最新版の Chrome / Edge / Firefox / Safari をお試しください。";
+  } else if (msg.includes("404") || msg.includes("not found")) {
+    hint = "ヒント: モデルファイルが見つかりませんでした。リポジトリ名・ファイル名が変更された可能性があります。";
+  } else if (msg.includes("abort")) {
+    hint = "ヒント: 処理が中断されました。";
+  }
+
+  $errorBox.style.display = "block";
+  $errorBox.innerHTML =
+    `❌ エラーが発生しました (${context})\n` +
+    `種別: ${name}\n` +
+    `内容: ${message}` +
+    (hint ? `\n\n<span class="hint">${hint}</span>` : "");
+}
+
+function clearError() {
+  $errorBox.style.display = "none";
+  $errorBox.textContent = "";
+}
+
+function addMessage(role, text) {
+  const div = document.createElement("div");
+  div.className = `msg ${role}`;
+  div.textContent = text;
+  $chat.appendChild(div);
+  $chat.scrollTop = $chat.scrollHeight;
+  return div;
+}
+
+$loadBtn.addEventListener("click", async () => {
+  clearError();
+  $loadBtn.disabled = true;
+  setBadge("ダウンロード中…", false);
+  setStatus("モデルファイルをダウンロード中… (初回は約1GBのため時間がかかります)");
+  $progress.style.width = "0%";
+
+  try {
+    wllama = new Wllama(CONFIG_PATHS);
+
+    await wllama.loadModelFromHF(MODEL, {
+      progressCallback: ({ loaded, total }) => {
+        if (total) {
+          const pct = Math.round((loaded / total) * 100);
+          $progress.style.width = pct + "%";
+          const mbLoaded = (loaded / 1024 / 1024).toFixed(1);
+          const mbTotal = (total / 1024 / 1024).toFixed(1);
+          setStatus(`ダウンロード中: ${pct}% (${mbLoaded}MB / ${mbTotal}MB)`);
+        } else {
+          setStatus(`ダウンロード中… (${(loaded / 1024 / 1024).toFixed(1)}MB)`);
+        }
+      },
+    });
+
+    setBadge("準備完了", true);
+    setStatus("モデルのロードが完了しました。下のチャット欄からメッセージを送信できます。");
+    $progress.style.width = "100%";
+    $unloadBtn.disabled = false;
+    $input.disabled = false;
+    $sendBtn.disabled = false;
+  } catch (err) {
+    setBadge("エラー", false);
+    setStatus("モデルのロードに失敗しました。詳細はエラー欄を確認してください。");
+    showError(err, "モデルのダウンロード/ロード");
+    $loadBtn.disabled = false;
+  }
+});
+
+$unloadBtn.addEventListener("click", async () => {
+  clearError();
+  try {
+    if (wllama) {
+      await wllama.exit();
+      wllama = null;
+    }
+    setBadge("未ロード", false);
+    setStatus("モデルを解放しました。再度ダウンロードするにはボタンを押してください。");
+    $progress.style.width = "0%";
+    $unloadBtn.disabled = true;
+    $input.disabled = true;
+    $sendBtn.disabled = true;
+    $loadBtn.disabled = false;
+    history = [];
+    $chat.innerHTML = "";
+  } catch (err) {
+    showError(err, "モデルの解放");
+  }
+});
+
+async function sendMessage() {
+  const text = $input.value.trim();
+  if (!text || !wllama) return;
+
+  clearError();
+  addMessage("user", text);
+  history.push({ role: "user", content: text });
+  $input.value = "";
+  $sendBtn.disabled = true;
+  $stopBtn.disabled = false;
+  stopRequested = false;
+
+  const assistantDiv = addMessage("assistant", "…");
+  let output = "";
+
+  try {
+    const result = await wllama.createChatCompletion(history, {
+      nPredict: 512,
+      sampling: { temp: 0.7, top_k: 40, top_p: 0.9 },
+      onNewToken: (token, piece, currentText) => {
+        if (stopRequested) return;
+        output = currentText;
+        assistantDiv.textContent = output || "…";
+        $chat.scrollTop = $chat.scrollHeight;
+      },
+    });
+
+    const finalText =
+      (result && result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content) ||
+      output || "(応答が空でした)";
+    assistantDiv.textContent = finalText;
+    history.push({ role: "assistant", content: finalText });
+  } catch (err) {
+    assistantDiv.remove();
+    showError(err, "応答の生成");
+  } finally {
+    $sendBtn.disabled = false;
+    $stopBtn.disabled = true;
+  }
+}
+
+$sendBtn.addEventListener("click", sendMessage);
+$input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+$stopBtn.addEventListener("click", () => {
+  stopRequested = true;
+  if (wllama && typeof wllama.stopCompletion === "function") {
+    try { wllama.stopCompletion(); } catch (e) { /* ignore */ }
+  }
+});
+
+window.addEventListener("error", (e) => {
+  if (e && e.message && e.message.toLowerCase().includes("wllama")) {
+    showError(e.error || new Error(e.message), "予期しないエラー");
+  }
+});
+</script>
+</body>
+</html>
