@@ -213,7 +213,7 @@ $loadBtn.addEventListener("click", async () => {
   try {
     wllama = new Wllama(CONFIG_PATHS);
 
-    await wllama.loadModelFromHF(MODEL, {
+    await wllama.loadModelFromHF(MODEL.repo, MODEL.file, {
       progressCallback: ({ loaded, total }) => {
         if (total) {
           const pct = Math.round((loaded / total) * 100);
