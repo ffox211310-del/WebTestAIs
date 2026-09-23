@@ -1,71 +1,23 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>wllama llm.jp Demo</title>
-</head>
-<body>
-  <h1>wllama + llm-jp デモ</h1>
-  
-  <button id="run-btn" disabled>モデル読み込み中...</button>
-  <pre id="output"></pre>
-
-  <script type="module">
-    import { Wllama } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@1.5.0/src/index.js';
-
-    // WllamaのSingle-thread/Multi-thread用WASMパスを設定
-    const CONFIG = {
-      'single-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@1.5.0/src/single-thread/wllama.wasm',
-      'multi-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@1.5.0/src/multi-thread/wllama.wasm',
-      'multi-thread/wllama.worker.mjs': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@1.5.0/src/multi-thread/wllama.worker.mjs',
-    };
-
-    const wllama = new Wllama(CONFIG);
-    const outputEl = document.getElementById('output');
-    const runBtn = document.getElementById('run-btn');
-
-    // 使用するllm-jpのGGUFモデルURL
-    // ※CORSが許可されているHugging FaceのGGUF直リンクなどを指定します
-    const MODEL_URL = 'https://huggingface.co/mmnga/llm-jp-3-1.8b-instruct-gguf/resolve/main/llm-jp-3-1.8b-instruct-q4_k_m.gguf';
-
-    async function init() {
-      outputEl.textContent = 'モデルをダウンロード中...\n';
-      
-      // モデルのロード
-      await wllama.loadModelFromUrl(MODEL_URL, {
-        progressCallback: ({ loaded, total }) => {
-          const pct = Math.round((loaded / total) * 100);
-          outputEl.textContent = `モデルダウンロード中: ${pct}%`;
-        },
-      });
-
-      outputEl.textContent = '準備完了。ボタンを押してテキストを生成してください。\n';
-      runBtn.disabled = false;
-    }
-
-    runBtn.addEventListener('click', async () => {
-      runBtn.disabled = true;
-      outputEl.textContent = '';
-
-      // Prompt（llm-jpのプロンプトフォーマットに合わせて調整してください）
-      const prompt = '### 指示:\n日本で一番高い山は何ですか？\n\n### 応答:\n';
-
-      // テキスト生成（ストリーミング出力）
-      await wllama.createCompletion(prompt, {
-        nPredict: 128,
-        sampling: {
-          temp: 0.7,
-          top_p: 0.9,
-        },
-        onNewToken: (token, piece, currentText) => {
-          outputEl.textContent = currentText;
-        },
-      });
-
-      runBtn.disabled = false;
-    });
-
-    init();
-  </script>
-</body>
-</html>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Wllama + Qwen2.5-1.5B (ブラウザ内推論)</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2f3a;
+    --text: #e6e8eb;
+    --muted: #8a919e;
+    --accent: #5b8def;
+    --accent-hover: #7aa3f2;
+    --ok: #3ecf8e;
+    --err-bg: #2a1416;
+    --err-border: #7a2530;
+    --err-text: #ff8a94;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
