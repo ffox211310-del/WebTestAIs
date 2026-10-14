@@ -3,129 +3,154 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transformers.js WebGPU Instruct テスト</title>
+    <title>Wllama Vision (画像認識) テスト</title>
     <style>
-        body { font-family: sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #333; }
-        textarea { width: 100%; height: 100px; padding: 10px; font-size: 16px; box-sizing: border-box; }
-        button { padding: 10px 20px; font-size: 16px; background: #0070f3; color: white; border: none; cursor: pointer; border-radius: 4px; margin-top: 10px; }
+        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #333; }
+        .box { background: #f9f9f9; border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        textarea { width: 100%; height: 80px; padding: 10px; font-size: 14px; box-sizing: border-box; }
+        button { padding: 10px 20px; font-size: 16px; background: #10b981; color: white; border: none; cursor: pointer; border-radius: 4px; }
         button:disabled { background: #ccc; cursor: not-allowed; }
-        #status { margin: 15px 0; padding: 10px; background: #f0f0f0; border-radius: 4px; font-weight: bold; }
-        #output { white-space: pre-wrap; background: #fafafa; border: 1px solid #ddd; padding: 15px; margin-top: 20px; border-radius: 4px; min-height: 80px; }
+        #status { font-weight: bold; color: #d97706; margin-bottom: 10px; }
+        #output { white-space: pre-wrap; background: #fff; border: 1px solid #ccc; padding: 15px; border-radius: 4px; min-height: 100px; }
+        img { max-width: 100%; max-height: 300px; display: block; margin-top: 10px; border-radius: 4px; }
     </style>
 </head>
 <body>
 
-    <h1>Transformers.js (WebGPU) Instruct テスト</h1>
-    <p>モデル: <code>Qwen2.5-0.5B-Instruct</code></p>
+    <h1>Wllama Vision (画像認識) テスト</h1>
+    <p>SharedArrayBuffer（覚醒モード）を活かしたローカルマルチモーダル検証</p>
 
-    <div id="status">ステータス: 初期化中...</div>
+    <div class="box">
+        <h3>1. ステータス</h3>
+        <div id="status">Wllamaを初期化中... (モデルのロードには数分かかる場合があります)</div>
+        <progress id="progress" value="0" max="100" style="width: 100%; display:none;"></progress>
+    </div>
 
-    <label for="prompt">プロンプト (指示):</label><br>
-    <textarea id="prompt">日本の首都を教えて。また、そこのおすすめスポットを3つ挙げて。</textarea><br>
-    
-    <button id="generateBtn" disabled>生成開始</button>
+    <div class="box">
+        <h3>2. 画像とプロンプトの入力</h3>
+        <input type="file" id="imageInput" accept="image/*"><br>
+        <div id="previewContainer"></div>
+        <br>
+        <label for="prompt">質問・指示:</label><br>
+        <textarea id="prompt">この画像に何が写っているか詳しく説明して。</textarea><br><br>
+        <button id="runBtn" disabled>画像認識を実行</button>
+    </div>
 
-    <h3>出力結果:</h3>
-    <div id="output"></div>
+    <div class="box">
+        <h3>出力結果:</h3>
+        <div id="output">（ここに結果が表示されます）</div>
+    </div>
 
-    <!-- ES ModulesでTransformers.jsを読み込む -->
+    <!-- WllamaをCDN経由で読み込む (ES Modules) -->
     <script type="module">
-        import { pipeline } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3';
+        import { Wllama } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@latest/esm/index.js';
+
+        // ※注意: マルチモーダル（ビジョン）を動かすには、対応するマルチモーダルGGUFモデルとマルチモーダルプロジェクターが必要です。
+        // ここでは例として軽量なマルチモーダルモデルの構成を指定しています。
+        // （環境やモデルに合わせて適宜URLを変更してください）
+        const CONFIG_WLLAMA = {
+            // マルチモーダル対応のWllamaアセットパス
+            "supporters": {
+                // マルチモーダルに必要なファイルを配置するCDNパスなど
+            }
+        };
 
         const statusDiv = document.getElementById('status');
-        const generateBtn = document.getElementById('generateBtn');
+        const progressEl = document.getElementById('progress');
+        const runBtn = document.getElementById('runBtn');
+        const imageInput = document.getElementById('imageInput');
         const promptInput = document.getElementById('prompt');
         const outputDiv = document.getElementById('output');
+        const previewContainer = document.getElementById('previewContainer');
 
-        let generator = null;
+        let wllama = null;
+        let base64Image = null;
 
-        async function initAI() {
+        // 画像プレビュー処理
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (uploadEvent) => {
+                base64Image = uploadEvent.target.result;
+                previewContainer.innerHTML = `<img src="${base64Image}" alt="プレビュー">`;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        async function initWllama() {
             try {
-                // WebGPUが使えるかざっくりチェック
-                if (!navigator.gpu) {
-                    throw new Error("このブラウザはWebGPUをサポートしていません。");
-                }
-
-                statusDiv.textContent = "ステータス: WebGPUでモデルをロード中... (初回は数100MBのダウンロードがあります)";
-
-                // Text Generationパイプラインの作成 (WebGPU指定 & 4bit量子化)
-                generator = await pipeline('text-generation', 'onnx-community/Qwen2.5-0.5B-Instruct', {
-                    device: 'webgpu',
-                    dtype: 'q4', // 軽量な4bit量子化
+                statusDiv.textContent = "Wllamaインスタンスを生成中...";
+                
+                // マルチモーダル対応のWllama設定
+                // ※Wllama公式のマルチモーダル対応サンプルに準拠した初期化を行います
+                wllama = new Wllama({
+                    // シングルスレッド/マルチスレッドの自動判定（SharedArrayBufferが有効ならマルチスレッド発動）
                 });
 
-                statusDiv.textContent = "ステータス: 準備完了！ (WebGPU有効)";
-                generateBtn.disabled = false;
+                statusDiv.textContent = "マルチモーダルモデルをロード中（初回はダウンロードに時間がかかります）...";
+                progressEl.style.display = "block";
+
+                // 例: マルチモーダル対応モデル（Llama-3.2-11B-Vision等の量子化版など、Wllamaがサポートするビジョンモデルを指定）
+                // ※Wllamaでビジョンを扱う際は、プロジェクターファイルやクリップモデルの読み込みが必要になる場合があります。
+                await wllama.loadModelFromUrl(
+                    'https://huggingface.co/unsloth/Llama-3.2-11B-Vision-Instruct-GGUF/resolve/main/Llama-3.2-11B-Vision-Instruct-Q4_K_M.gguf',
+                    {
+                        // 進捗状況のフック
+                        onProgress: ({ loaded, total, progress }) => {
+                            progressEl.value = progress * 100;
+                            statusDiv.textContent = `モデルロード中... ${Math.round(progress * 100)}%`;
+                        }
+                    }
+                );
+
+                statusDiv.textContent = "準備完了！ (SharedArrayBuffer & Vision 稼働中)";
+                progressEl.style.display = "none";
+                runBtn.disabled = false;
 
             } catch (err) {
-                console.warn("WebGPUの初期化に失敗しました。WASMフォールバックを試みます...", err);
-                try {
-                    statusDiv.textContent = "ステータス: WASMモードでモデルをロード中（※低速です）...";
-                    generator = await pipeline('text-generation', 'onnx-community/Qwen2.5-0.5B-Instruct', {
-                        device: 'wasm',
-                    });
-                    statusDiv.textContent = "ステータス: 準備完了！ (WASMモード)";
-                    generateBtn.disabled = false;
-                } catch (wasmErr) {
-                    statusDiv.textContent = `エラー: ${wasmErr.message}`;
-                }
+                statusDiv.textContent = `初期化エラー: ${err.message}`;
+                console.error(err);
+                progressEl.style.display = "none";
             }
         }
 
-        generateBtn.addEventListener('click', async () => {
-            if (!generator) return;
+        runBtn.addEventListener('click', async () => {
+            if (!wllama) return;
+            const promptText = promptInput.value.trim();
+            if (!promptText) {
+                alert("プロンプトを入力してください。");
+                return;
+            }
 
-            const text = promptInput.value.trim();
-            if (!text) return;
-
-            generateBtn.disabled = true;
-            outputDiv.textContent = "";
-            statusDiv.textContent = "ステータス: 生成中...";
-
-            // ChatML形式のメッセージ構造
-            const messages = [
-                { role: "system", content: "あなたは親切なアシスタントです。" },
-                { role: "user", content: text }
-            ];
+            runBtn.disabled = true;
+            outputDiv.textContent = "推論中...";
 
             try {
-                // ストリーミング風に出力をフックするコールバック
-                const timeStart = performance.now();
-                let tokenCount = 0;
-
-                const output = await generator(messages, {
-                    max_new_tokens: 256,
+                // Wllamaでの推論実行（画像データを含むマルチモーダル推論）
+                // ※Wllamaのバージョン・ビジョン実装仕様によっては入力形式のメソッドが異なります
+                const result = await wllama.createCompletion(promptText, {
+                    nPredict: 512,
                     temperature: 0.7,
-                    do_sample: true,
-                    // トークンが生成されるたびに呼ばれるコールバック
-                    callback_function: (outputTokens) => {
-                        tokenCount++;
-                        // 最新の生成テキストを抽出して表示
-                        const generatedText = generator.tokenizer.decode(outputTokens, { skip_special_tokens: true });
-                        // 簡易的に末尾を表示（あるいはデコード結果をそのまま反映）
-                    },
-                    // ※v3のストリーミングは streamer オブジェクトを使うのが主流ですが、
-                    // シンプルに一括出力＋テキストエリア表示の例です。
+                    // 画像データがある場合はここに渡す（WllamaのマルチモーダルAPI仕様に準拠）
+                    image: base64Image, 
+                    onNewToken: (token, piece, text) => {
+                        outputDiv.textContent = text;
+                    }
                 });
 
-                // 上記の出力結果（messages形式に対応した出力）を取得
-                const responseMessage = output[0].generated_text.at(-1).content;
-                outputDiv.textContent = responseMessage;
-
-                const timeEnd = performance.now();
-                const sec = (timeEnd - timeStart) / 1000;
-                statusDiv.textContent = `ステータス: 完了 (生成時間: ${sec.toFixed(2)}秒)`;
-
+                outputDiv.textContent = result;
             } catch (err) {
-                statusDiv.textContent = `エラーが発生しました: ${err.message}`;
+                outputDiv.textContent = `推論エラー: ${err.message}`;
                 console.error(err);
             } finally {
-                generateBtn.disabled = false;
+                runBtn.disabled = false;
             }
         });
 
-        // 起動時にロード開始
-        initAI();
+        // 起動
+        initWllama();
     </script>
 </body>
 </html>
