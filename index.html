@@ -43,7 +43,7 @@
 
     <!-- WllamaをCDN経由で読み込む (ES Modules) -->
     <script type="module">
-        import { Wllama } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@latest/esm/index.js';
+        import { Wllama } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/esm/index.js';
 
         // ※注意: マルチモーダル（ビジョン）を動かすには、対応するマルチモーダルGGUFモデルとマルチモーダルプロジェクターが必要です。
         // ここでは例として軽量なマルチモーダルモデルの構成を指定しています。
@@ -95,7 +95,7 @@
                 // 例: マルチモーダル対応モデル（Llama-3.2-11B-Vision等の量子化版など、Wllamaがサポートするビジョンモデルを指定）
                 // ※Wllamaでビジョンを扱う際は、プロジェクターファイルやクリップモデルの読み込みが必要になる場合があります。
                 await wllama.loadModelFromUrl(
-                    'https://huggingface.co/unsloth/Llama-3.2-11B-Vision-Instruct-GGUF/resolve/main/Llama-3.2-11B-Vision-Instruct-Q4_K_M.gguf',
+                    'https://huggingface.co/mradermacher/Qwen2.5_VL_2B-GGUF/resolve/main/Qwen2.5_VL_2B.Q4_K_M.gguf',
                     {
                         // 進捗状況のフック
                         onProgress: ({ loaded, total, progress }) => {
